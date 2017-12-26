@@ -1,10 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from pandas import datetime
+from pandas import datetime, Series
 import math, time
 import itertools
 from sklearn import preprocessing
+from sklearn.preprocessing import MinMaxScaler
 import datetime
 from operator import itemgetter
 from sklearn.metrics import mean_squared_error
@@ -17,12 +18,31 @@ def get_stock_data(stock_name, normalized=0):
     url="data/0883.HK.csv"
 
     col_names = ['Date','Open','High','Low','Close','Adj close', 'Volume']
-    stocks = pd.read_csv(url, header=0, names=col_names)[['Open','High','Volume','Close']]
-    
-    # stocks = pd.read_csv(url, index_col=False, usecols=cols_to_use)[cols_to_use]
-    #print(stocks)
-    df = pd.DataFrame(stocks)
-    # df.drop(df.columns[[0,3,5]], axis=1, inplace=True) 
+    stocks = pd.read_csv(url, header=0, names=col_names)[['Open','Low','High','Volume','Close', 'Close']]
+    # Read the Close column twice and shift it down by 1 so that each row has a previous close price except the first one
+    stocks.columns = ['Open','Low','High','Volume','PrevClose', 'Close']
+    stocks.PrevClose = stocks.PrevClose.shift(1)
+    # set the first PrevClose to be the current Close as it is a NaN after the shift
+    stocks.PrevClose[0] = stocks.Close[0]
+
+    # Combine all columns into 1 by this fomular
+    # (EachPrice - PrevClose) * volume
+    params = []
+    print(len(stocks))
+    for index in range(len(stocks) - 1):
+        param = ((stocks.Open[index] - stocks.PrevClose[index]) / stocks.PrevClose[index] * stocks.Volume[index]
+                 + (stocks.Low[index] - stocks.PrevClose[index]) / stocks.PrevClose[index]  * stocks.Volume[index]
+                 + (stocks.High[index] - stocks.PrevClose[index]) / stocks.PrevClose[index] * stocks.Volume[index]
+        )
+        params.append([param, stocks.Close[index]])
+
+    params[0].fillna(0, inplace=True)
+    # normalize features
+    #scaler = MinMaxScaler(feature_range=(0, 1))
+    #scaled = scaler.fit_transform(params)
+    print(params)
+    df = pd.DataFrame(params)
+    # df.drop(df.columns[[0,3,5]], axis=1, inplace=True)
     return df
 
 stock_name = '0883'
@@ -33,7 +53,6 @@ today = datetime.date.today()
 file_name = stock_name+'_stock_%s.csv' % today
 print(file_name)
 df.to_csv(file_name)
-
 # df['High'] = df['High'] / 100
 # df['Open'] = df['Open'] / 100
 # df['Close'] = df['Close'] / 100
@@ -49,6 +68,7 @@ def load_data(stock, seq_len):
     result = []
     for index in range(len(data) - sequence_length):
         result.append(data[index: index + sequence_length])
+
 
     result = np.array(result)
     
@@ -90,21 +110,16 @@ def build_model(layers):
     return model
 
 def build_model2(layers):
-        d = 0.2
-        model = Sequential()
-        model.add(LSTM(64, input_shape=(layers[1], layers[0]), return_sequences=True))
-        model.add(LSTM(64, input_shape=(layers[1], layers[0]), return_sequences=True))
-        model.add(LSTM(64, input_shape=(layers[1], layers[0]), return_sequences=True))
-        model.add(LSTM(64, input_shape=(layers[1], layers[0]), return_sequences=True))
-        model.add(LSTM(64, input_shape=(layers[1], layers[0]), return_sequences=True))
-        model.add(LSTM(64, input_shape=(layers[1], layers[0]), return_sequences=True))
-        model.add(Dropout(d))
-        model.add(LSTM(64, input_shape=(layers[1], layers[0]), return_sequences=False))
-        model.add(Dropout(d))
-        model.add(Dense(16,init='uniform',activation='relu'))        
-        model.add(Dense(1,init='uniform',activation='relu'))
-        model.compile(loss='mse',optimizer='adam',metrics=['accuracy'])
-        return model
+    d = 0.2
+    model = Sequential()
+    model.add(LSTM(128, input_shape=(layers[1], layers[0]), return_sequences=True))
+    model.add(Dropout(d))
+    model.add(LSTM(64, input_shape=(layers[1], layers[0]), return_sequences=False))
+    model.add(Dropout(d))
+    model.add(Dense(16,init='uniform',activation='relu'))
+    model.add(Dense(1,init='uniform',activation='relu'))
+    model.compile(loss='mse',optimizer='adam',metrics=['accuracy'])
+    return model
 
 window = 5
 X_train, y_train, X_test, y_test = load_data(df[::-1], window)
@@ -114,7 +129,7 @@ print("X_test", X_test.shape)
 print("y_test", y_test.shape)
 
 # model = build_model([3,lag,1])
-numOfColumnsAsInout = 4
+numOfColumnsAsInout = 2
 model = build_model2([numOfColumnsAsInout,window,1])
 print(model.summary())
 
@@ -128,10 +143,10 @@ model.fit(
     validation_split=0.1,
     verbose=1)
 
-trainScore = model.evaluate(X_train, y_train, verbose=0)
+trainScore = model.evaluate(X_train, y_train, verbose=1)
 print('Train Score: %.2f MSE (%.2f RMSE)' % (trainScore[0], math.sqrt(trainScore[0])))
 
-testScore = model.evaluate(X_test, y_test, verbose=0)
+testScore = model.evaluate(X_test, y_test, verbose=1)
 print('Test Score: %.2f MSE (%.2f RMSE)' % (testScore[0], math.sqrt(testScore[0])))
 
 # print(X_test[-1])
