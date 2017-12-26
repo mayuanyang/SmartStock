@@ -1,5 +1,6 @@
 from math import sqrt
 
+import datetime
 from keras.callbacks import ReduceLROnPlateau
 from numpy import concatenate
 from matplotlib import pyplot
@@ -15,8 +16,10 @@ from keras.layers import Dense, Dropout
 from keras.layers import LSTM
 import math
 
+def parse(x):
+	return datetime.strptime(x, '%Y %m %d %H')
 
-# convert series to supervised learning
+# convert series to supervised learning, it appends the predict columns to the right of the dataset, so if original dataset has 7 columns, it will become 14
 def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     n_vars = 1 if type(data) is list else data.shape[1]
     df = DataFrame(data)
@@ -43,14 +46,14 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
 
 # load dataset
 url="data/0883.HK.csv"
-col_names = ['Date','Open','High','Low','Close','Adj close', 'Volume']
+col_names = ['Open','High','Low','Close','Adj close', 'Volume']
 dataset = pd.read_csv(url, header=0, names=col_names)[['Open','Low','High','Volume','Close', 'Close']]
 # Read the Close column twice and shift it down by 1 so that each row has a previous close price except the first one
 dataset.columns = ['Open','Low','High','Volume','PrevClose', 'Close']
 dataset.PrevClose = dataset.PrevClose.shift(1)
 # set the first PrevClose to be the current Close as it is a NaN after the shift
 dataset.PrevClose[0] = dataset.Close[0]
-#dataset.Volume = dataset.Volume / 1000000
+dataset.to_csv("test.csv")
 
 values = dataset.values
 for i in range(0, len(values) - 1):
@@ -67,7 +70,7 @@ scaled = scaler.fit_transform(values)
 # frame as supervised learning
 reframed = series_to_supervised(scaled, 1, 1)
 # drop columns we don't want to predict
-#reframed.drop(reframed.columns[[9, 10, 11, 12, 13, 14, 15]], axis=1, inplace=True)
+reframed.drop(reframed.columns[[6,7,8,9,10]], axis=1, inplace=True)
 print(reframed.head())
 
 # split into train and test sets
@@ -90,19 +93,19 @@ lr_reducer = ReduceLROnPlateau(monitor='val_loss', patience=50, cooldown=0, verb
 # design network
 dropRate = 0.2
 model = Sequential()
-model.add(LSTM(128, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=True))
+#model.add(LSTM(128, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=True))
 model.add(LSTM(64, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=False))
-model.add(Dense(16,init='uniform',activation='relu'))
-model.add(Dense(1,init='uniform',activation='relu'))
+#model.add(Dense(16,init='uniform',activation='relu'))
+model.add(Dense(1))
 model.compile(loss='mae', optimizer='adam',metrics=['accuracy'])
 # fit network
-history = model.fit(train_X, train_y, epochs=1000, batch_size=32, verbose=1,
+history = model.fit(train_X, train_y, epochs=1000, batch_size=10, verbose=1,
                     shuffle=False, validation_data=(test_X, test_y), callbacks=[lr_reducer])
 # plot history
-pyplot.plot(history.history['loss'], label='train')
-pyplot.plot(history.history['val_loss'], label='test')
-pyplot.legend()
-pyplot.show()
+#pyplot.plot(history.history['loss'], label='train')
+#pyplot.plot(history.history['val_loss'], label='test')
+#pyplot.legend()
+#pyplot.show()
 
 # make a prediction
 yhat = model.predict(test_X)
@@ -118,4 +121,9 @@ inv_y = scaler.inverse_transform(inv_y)
 inv_y = inv_y[:, 0]
 # calculate RMSE
 rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
+
+print("Predict")
+print(inv_yhat)
+print("Actual")
+print(inv_y) # The test set was used
 print('Test RMSE: %.3f' % rmse)
