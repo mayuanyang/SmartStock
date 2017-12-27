@@ -12,7 +12,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import mean_squared_error
 from keras.models import Sequential
-from keras.layers import Dense, Dropout
+from keras.layers import Dense, Dropout, Activation
 from keras.layers import LSTM
 import math
 
@@ -70,7 +70,7 @@ scaled = scaler.fit_transform(values)
 # frame as supervised learning
 reframed = series_to_supervised(scaled, 1, 1)
 # drop columns we don't want to predict
-reframed.drop(reframed.columns[[6,7,8,9,10]], axis=1, inplace=True)
+reframed.drop(reframed.columns[[6,7,8,9,10]], axis=1, inplace=True) # Drop PrevClose in prediction
 print(reframed.head())
 
 # split into train and test sets
@@ -93,13 +93,12 @@ lr_reducer = ReduceLROnPlateau(monitor='val_loss', patience=50, cooldown=0, verb
 # design network
 dropRate = 0.2
 model = Sequential()
-#model.add(LSTM(128, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=True))
-model.add(LSTM(64, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=False))
-#model.add(Dense(16,init='uniform',activation='relu'))
+#model.add(LSTM(10, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=True))
+model.add(LSTM(30, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=False))
 model.add(Dense(1))
 model.compile(loss='mae', optimizer='adam',metrics=['accuracy'])
 # fit network
-history = model.fit(train_X, train_y, epochs=1000, batch_size=10, verbose=1,
+history = model.fit(train_X, train_y, epochs=500, batch_size=1, verbose=1,
                     shuffle=False, validation_data=(test_X, test_y), callbacks=[lr_reducer])
 # plot history
 #pyplot.plot(history.history['loss'], label='train')
@@ -122,8 +121,14 @@ inv_y = inv_y[:, 0]
 # calculate RMSE
 rmse = sqrt(mean_squared_error(inv_y, inv_yhat))
 
+
 print("Predict")
 print(inv_yhat)
 print("Actual")
 print(inv_y) # The test set was used
 print('Test RMSE: %.3f' % rmse)
+
+pyplot.plot(inv_yhat, label='Predict')
+pyplot.plot(inv_y, label='Actual')
+pyplot.legend()
+pyplot.show()
