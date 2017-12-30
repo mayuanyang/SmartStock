@@ -23,6 +23,7 @@ def parse(x):
 def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     n_vars = 1 if type(data) is list else data.shape[1]
     df = DataFrame(data)
+    print(df.head())
     cols, names = list(), list()
     # input sequence (t-n, ... t-1)
     for i in range(n_in, 0, -1):
@@ -30,7 +31,7 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
         names += [('var%d(t-%d)' % (j + 1, i)) for j in range(n_vars)]
     # forecast sequence (t, t+1, ... t+n)
     for i in range(0, n_out):
-        cols.append(df.shift(-i))
+        cols.append(df.shift(-(i))) # Can shift the close price to be 2 days later (i + 1), we train the network to predict this price
         if i == 0:
             names += [('var%d(t)' % (j + 1)) for j in range(n_vars)]
         else:
@@ -38,6 +39,8 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
     # put it all together
     agg = concat(cols, axis=1)
     agg.columns = names
+    print("shifted")
+    print(agg.head())
     # drop rows with NaN values
     if dropnan:
         agg.dropna(inplace=True)
@@ -45,14 +48,11 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
 
 
 # load dataset
-url="data/0883.HK.csv"
+url="data/0883.HK_weekly.csv"
 col_names = ['Open','High','Low','Close','Adj close', 'Volume']
-dataset = pd.read_csv(url, header=0, names=col_names)[['Open','Low','High','Volume','Close', 'Close']]
-# Read the Close column twice and shift it down by 1 so that each row has a previous close price except the first one
-dataset.columns = ['Open','Low','High','Volume','PrevClose', 'Close']
-dataset.PrevClose = dataset.PrevClose.shift(1)
-# set the first PrevClose to be the current Close as it is a NaN after the shift
-dataset.PrevClose[0] = dataset.Close[0]
+dataset = pd.read_csv(url, header=0, names=col_names)[['Open','Low','High','Volume','Adj close','Close']]
+dataset.columns = ['Open','Low','High','Volume','Adj close','Close']
+
 dataset.to_csv("test.csv")
 
 values = dataset.values

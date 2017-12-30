@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+from keras.callbacks import ReduceLROnPlateau
 from pandas import datetime, Series
 import math, time
 import itertools
@@ -13,6 +14,8 @@ from math import sqrt
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.layers.recurrent import LSTM
+
+scaler = MinMaxScaler(feature_range=(0, 1))
 
 def get_stock_data(stock_name, normalized=0):
     url="data/0883.HK.csv"
@@ -34,14 +37,17 @@ def get_stock_data(stock_name, normalized=0):
                  + (stocks.Low[index] - stocks.PrevClose[index]) / stocks.PrevClose[index]  * stocks.Volume[index]
                  + (stocks.High[index] - stocks.PrevClose[index]) / stocks.PrevClose[index] * stocks.Volume[index]
         )
-        params.append([param, stocks.Close[index]])
+        if (math.isnan(param)) or param < 0:
+            param = 0.0
 
-    params[0].fillna(0, inplace=True)
-    # normalize features
-    #scaler = MinMaxScaler(feature_range=(0, 1))
-    #scaled = scaler.fit_transform(params)
+        param = float(param)
+        params.append([float(param), stocks.Close[index]])
+
     print(params)
-    df = pd.DataFrame(params)
+    # normalize features
+    scaled = scaler.fit_transform(params)
+    print(scaled)
+    df = pd.DataFrame(scaled)
     # df.drop(df.columns[[0,3,5]], axis=1, inplace=True)
     return df
 
@@ -50,15 +56,8 @@ df = get_stock_data(stock_name,0)
 df.tail()
 
 today = datetime.date.today()
-file_name = stock_name+'_stock_%s.csv' % today
-print(file_name)
+file_name = "train.csv"
 df.to_csv(file_name)
-# df['High'] = df['High'] / 100
-# df['Open'] = df['Open'] / 100
-# df['Close'] = df['Close'] / 100
-# df['Volume'] = df['Volume'] / 100
-# print("The first 5 rows")
-# print(df.head(5))
 
 def load_data(stock, seq_len):
     amount_of_features = len(stock.columns)
@@ -135,12 +134,15 @@ print(model.summary())
 
 normalizationFactor = 10
 
+# callbacks
+lr_reducer = ReduceLROnPlateau(monitor='val_loss', patience=50, cooldown=0, verbose=1)
+
 model.fit(
     X_train/normalizationFactor,
     y_train/normalizationFactor,
     batch_size=64,
-    nb_epoch=500,
-    validation_split=0.1,
+    nb_epoch=200,
+    validation_data=(X_test, y_test), callbacks=[lr_reducer],
     verbose=1)
 
 trainScore = model.evaluate(X_train, y_train, verbose=1)
