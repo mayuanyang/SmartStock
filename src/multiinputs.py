@@ -31,7 +31,7 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
         names += [('var%d(t-%d)' % (j + 1, i)) for j in range(n_vars)]
     # forecast sequence (t, t+1, ... t+n)
     for i in range(0, n_out):
-        cols.append(df.shift(-(i))) # Can shift the close price to be 2 days later (i + 1), we train the network to predict this price
+        cols.append(df.shift(-(i+2))) # Can shift the close price to be 2 days later (i + 1), we train the network to predict this price
         if i == 0:
             names += [('var%d(t)' % (j + 1)) for j in range(n_vars)]
         else:
@@ -48,7 +48,7 @@ def series_to_supervised(data, n_in=1, n_out=1, dropnan=True):
 
 
 # load dataset
-url="data/0883.HK_weekly.csv"
+url="data/0883.HK_daily.csv"
 col_names = ['Open','High','Low','Close','Adj close', 'Volume']
 dataset = pd.read_csv(url, header=0, names=col_names)[['Open','Low','High','Volume','Adj close','Close']]
 dataset.columns = ['Open','Low','High','Volume','Adj close','Close']
@@ -88,17 +88,17 @@ test_X = test_X.reshape((test_X.shape[0], 1, test_X.shape[1]))
 print(train_X.shape, train_y.shape, test_X.shape, test_y.shape)
 
 # callbacks
-lr_reducer = ReduceLROnPlateau(monitor='val_loss', patience=50, cooldown=0, verbose=1)
+lr_reducer = ReduceLROnPlateau(monitor='val_loss', patience=20, cooldown=0, verbose=1)
 
 # design network
-dropRate = 0.2
+dropRate = 0.1
 model = Sequential()
 #model.add(LSTM(10, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=True))
 model.add(LSTM(30, input_shape=(train_X.shape[1], train_X.shape[2]), return_sequences=False))
 model.add(Dense(1))
 model.compile(loss='mae', optimizer='adam',metrics=['accuracy'])
 # fit network
-history = model.fit(train_X, train_y, epochs=500, batch_size=1, verbose=1,
+history = model.fit(train_X, train_y, epochs=200, batch_size=2, verbose=1,
                     shuffle=False, validation_data=(test_X, test_y), callbacks=[lr_reducer])
 # plot history
 #pyplot.plot(history.history['loss'], label='train')
@@ -112,6 +112,8 @@ test_X = test_X.reshape((test_X.shape[0], test_X.shape[2]))
 # invert scaling for forecast
 inv_yhat = concatenate((yhat, test_X[:, 1:]), axis=1)
 inv_yhat = scaler.inverse_transform(inv_yhat)
+print ("Predict in full")
+print (inv_yhat)
 inv_yhat = inv_yhat[:, 0]
 # invert scaling for actual
 test_y = test_y.reshape((len(test_y), 1))
